@@ -1,0 +1,7 @@
+compound_id,smiles
+CMP001,CCO
+CMP002,OCC
+CMP003,c1ccccc1
+CMP004,CC(=O)Oc1ccccc1C(=O)O
+CMP005,CC(C)N
+CMP006,invalid_smiles
