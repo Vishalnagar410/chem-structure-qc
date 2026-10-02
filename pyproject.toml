@@ -1,15 +1,17 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "chem-structure-qc"
-version = "0.1.0"
-description = "A reproducible cheminformatics pipeline for chemical structure validation and QC"
+version = "0.2.0"
+description = "Chemical structure validation, canonicalization, and quality control"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{name = "Vishal Nagar"}]
+keywords = ["cheminformatics", "RDKit", "SMILES", "chemical-data-quality"]
 dependencies = [
   "pandas>=2.0",
   "rdkit>=2025.3.1",

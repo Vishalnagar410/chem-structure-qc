@@ -3,11 +3,24 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any
 
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import Crippen, Descriptors, Lipinski, rdMolDescriptors
+from rdkit import rdBase
+
+
+DESCRIPTOR_COLUMNS = (
+    "molecular_weight",
+    "logp",
+    "tpsa",
+    "hbd",
+    "hba",
+    "rotatable_bonds",
+    "heavy_atoms",
+    "ring_count",
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +30,7 @@ class QCResult:
     invalid_structures: int
     unique_structures: int
     duplicate_rows: int
+    duplicate_groups: int
 
     @property
     def invalid_rate(self) -> float:
@@ -27,72 +41,145 @@ class QCResult:
         return self.duplicate_rows / self.valid_structures if self.valid_structures else 0.0
 
 
-def mol_from_smiles(smiles: object) -> Chem.Mol | None:
-    """Parse a SMILES value, returning None for missing/invalid input."""
-    if smiles is None or (isinstance(smiles, float) and pd.isna(smiles)):
-        return None
+def _parse_smiles(smiles: object) -> tuple[Chem.Mol | None, str | None]:
+    if smiles is None or pd.isna(smiles):
+        return None, "Missing or empty SMILES"
     text = str(smiles).strip()
     if not text:
-        return None
+        return None, "Missing or empty SMILES"
     try:
-        return Chem.MolFromSmiles(text)
+        with rdBase.BlockLogs():
+            molecule = Chem.MolFromSmiles(text)
+    except Exception:
+        return None, "Could not parse SMILES"
+    if molecule is None:
+        return None, "Could not parse SMILES"
+    return molecule, None
+
+
+def mol_from_smiles(smiles: object) -> Chem.Mol | None:
+    """Parse a SMILES value, returning None when it is missing or invalid."""
+    molecule, _ = _parse_smiles(smiles)
+    return molecule
+
+
+def _calculate(value: Any, transform: Any) -> float | int | None:
+    try:
+        result = transform(value)
+        return round(result, 4) if isinstance(result, float) else int(result)
     except Exception:
         return None
 
 
-def descriptor_row(mol: Chem.Mol) -> dict[str, float | int | str]:
-    """Return a compact, recruiter-readable descriptor set."""
+def descriptor_row(mol: Chem.Mol) -> dict[str, float | int | None]:
+    """Calculate the supported molecular descriptors for one valid molecule."""
     return {
-        "canonical_smiles": Chem.MolToSmiles(mol, canonical=True),
-        "molecular_weight": round(Descriptors.MolWt(mol), 4),
-        "logp": round(Crippen.MolLogP(mol), 4),
-        "tpsa": round(rdMolDescriptors.CalcTPSA(mol), 4),
-        "hbd": int(Lipinski.NumHDonors(mol)),
-        "hba": int(Lipinski.NumHAcceptors(mol)),
-        "rotatable_bonds": int(Lipinski.NumRotatableBonds(mol)),
-        "heavy_atoms": int(mol.GetNumHeavyAtoms()),
-        "ring_count": int(rdMolDescriptors.CalcNumRings(mol)),
+        "molecular_weight": _calculate(mol, Descriptors.MolWt),
+        "logp": _calculate(mol, Crippen.MolLogP),
+        "tpsa": _calculate(mol, rdMolDescriptors.CalcTPSA),
+        "hbd": _calculate(mol, Lipinski.NumHDonors),
+        "hba": _calculate(mol, Lipinski.NumHAcceptors),
+        "rotatable_bonds": _calculate(mol, Lipinski.NumRotatableBonds),
+        "heavy_atoms": _calculate(mol, lambda molecule: molecule.GetNumHeavyAtoms()),
+        "ring_count": _calculate(mol, rdMolDescriptors.CalcNumRings),
     }
 
 
-def process_dataframe(df: pd.DataFrame, smiles_column: str = "smiles") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, QCResult]:
-    """Validate and enrich a dataframe containing a SMILES column."""
-    if smiles_column not in df.columns:
-        raise ValueError(f"Missing required column: {smiles_column}")
+def process_dataframe(
+    df: pd.DataFrame,
+    smiles_column: str = "smiles",
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, QCResult]:
+    """Validate input rows and return results, invalid rows, duplicate groups, and counts."""
+    required_columns = ["compound_id", smiles_column]
+    missing_columns = [column for column in dict.fromkeys(required_columns) if column not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-    working = df.copy()
-    working["_mol"] = working[smiles_column].map(mol_from_smiles)
-    invalid_mask = working["_mol"].isna()
+    result_rows: list[dict[str, object]] = []
+    invalid_rows: list[dict[str, object]] = []
+    for row in df.to_dict(orient="records"):
+        compound_id = row["compound_id"]
+        input_smiles = row[smiles_column]
+        molecule, error_reason = _parse_smiles(input_smiles)
+        canonical_smiles = None
+        descriptors: dict[str, float | int | None] = dict.fromkeys(DESCRIPTOR_COLUMNS)
+        if molecule is not None:
+            try:
+                canonical_smiles = Chem.MolToSmiles(molecule, canonical=True)
+            except Exception:
+                error_reason = "Could not generate canonical SMILES"
+            if error_reason is None:
+                descriptors = descriptor_row(molecule)
+        is_valid = error_reason is None
+        result_rows.append(
+            {
+                "compound_id": compound_id,
+                "input_smiles": input_smiles,
+                "canonical_smiles": canonical_smiles if is_valid else None,
+                "is_valid": is_valid,
+                **descriptors,
+                "is_duplicate": False,
+            }
+        )
+        if not is_valid:
+            invalid_rows.append(
+                {
+                    "compound_id": compound_id,
+                    "input_smiles": input_smiles,
+                    "error_reason": error_reason,
+                }
+            )
 
-    invalid = working.loc[invalid_mask].drop(columns=["_mol"]).copy()
-    valid = working.loc[~invalid_mask].copy()
-
-    if not valid.empty:
-        descriptors = valid["_mol"].map(descriptor_row).apply(pd.Series)
-        valid = pd.concat([valid.drop(columns=["_mol"]), descriptors], axis=1)
-        valid["is_duplicate"] = valid.duplicated(subset=["canonical_smiles"], keep=False)
-    else:
-        valid = valid.drop(columns=["_mol"])
-        valid["is_duplicate"] = pd.Series(dtype=bool)
-
-    duplicate_rows = valid.loc[valid["is_duplicate"]].copy()
-    unique_structures = int(valid["canonical_smiles"].nunique()) if not valid.empty else 0
-
+    result_columns = [
+        "compound_id", "input_smiles", "canonical_smiles", "is_valid",
+        *DESCRIPTOR_COLUMNS, "is_duplicate",
+    ]
+    results = pd.DataFrame(result_rows, columns=result_columns)
+    invalid = pd.DataFrame(invalid_rows, columns=["compound_id", "input_smiles", "error_reason"])
+    duplicate_group_rows: list[dict[str, object]] = []
+    if not results.empty:
+        valid_mask = results["is_valid"]
+        duplicate_counts = results.loc[valid_mask, "canonical_smiles"].value_counts()
+        duplicate_smiles = duplicate_counts[duplicate_counts > 1].index
+        results.loc[results["canonical_smiles"].isin(duplicate_smiles), "is_duplicate"] = True
+        for canonical_smiles in duplicate_smiles:
+            members = results.loc[results["canonical_smiles"] == canonical_smiles, "compound_id"]
+            duplicate_group_rows.append(
+                {
+                    "canonical_smiles": canonical_smiles,
+                    "duplicate_count": len(members),
+                    "compound_ids": json.dumps([str(compound_id) for compound_id in members]),
+                }
+            )
+    duplicate_groups = pd.DataFrame(
+        duplicate_group_rows,
+        columns=["canonical_smiles", "duplicate_count", "compound_ids"],
+    )
+    valid_count = int(results["is_valid"].sum())
+    duplicate_row_count = int(results["is_duplicate"].sum())
     report = QCResult(
         input_rows=len(df),
-        valid_structures=len(valid),
+        valid_structures=valid_count,
         invalid_structures=len(invalid),
-        unique_structures=unique_structures,
-        duplicate_rows=len(duplicate_rows),
+        unique_structures=valid_count - duplicate_row_count + len(duplicate_groups),
+        duplicate_rows=duplicate_row_count,
+        duplicate_groups=len(duplicate_groups),
     )
-    return valid, invalid, duplicate_rows, report
+    return results, invalid, duplicate_groups, report
 
 
-def write_outputs(valid: pd.DataFrame, invalid: pd.DataFrame, duplicates: pd.DataFrame, report: QCResult, output_dir: Path) -> None:
+def write_outputs(
+    results: pd.DataFrame,
+    invalid: pd.DataFrame,
+    duplicate_groups: pd.DataFrame,
+    report: QCResult,
+    output_dir: Path,
+) -> None:
+    """Write the machine-readable QC tables and summary report."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    valid.to_csv(output_dir / "clean_compounds.csv", index=False)
+    results.to_csv(output_dir / "qc_results.csv", index=False)
     invalid.to_csv(output_dir / "invalid_structures.csv", index=False)
-    duplicates.to_csv(output_dir / "duplicate_structures.csv", index=False)
+    duplicate_groups.to_csv(output_dir / "duplicate_groups.csv", index=False)
 
     payload = asdict(report)
     payload["invalid_rate"] = report.invalid_rate

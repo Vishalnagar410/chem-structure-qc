@@ -1,0 +1,2 @@
+compound_id,input_smiles,error_reason
+CMP006,invalid_smiles,Could not parse SMILES

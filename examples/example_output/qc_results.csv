@@ -1,0 +1,7 @@
+compound_id,input_smiles,canonical_smiles,is_valid,molecular_weight,logp,tpsa,hbd,hba,rotatable_bonds,heavy_atoms,ring_count,is_duplicate
+CMP001,CCO,CCO,True,46.069,-0.0014,20.23,1.0,1.0,0.0,3.0,0.0,True
+CMP002,OCC,CCO,True,46.069,-0.0014,20.23,1.0,1.0,0.0,3.0,0.0,True
+CMP003,c1ccccc1,c1ccccc1,True,78.114,1.6866,0.0,0.0,0.0,0.0,6.0,1.0,False
+CMP004,CC(=O)Oc1ccccc1C(=O)O,CC(=O)Oc1ccccc1C(=O)O,True,180.159,1.3101,63.6,1.0,3.0,2.0,13.0,1.0,False
+CMP005,CC(C)N,CC(C)N,True,59.112,0.3535,26.02,1.0,1.0,0.0,4.0,0.0,False
+CMP006,invalid_smiles,,False,,,,,,,,,False
