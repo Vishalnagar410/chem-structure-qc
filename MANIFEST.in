@@ -1,0 +1,3 @@
+include app/*.py
+include data/example_compounds.csv
+include .streamlit/config.toml

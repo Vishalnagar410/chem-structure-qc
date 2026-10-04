@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chem-structure-qc"
-version = "0.2.0"
+version = "0.3.0"
 description = "Chemical structure validation, canonicalization, and quality control"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8.0"]
+ui = ["streamlit>=1.49"]
 
 [project.scripts]
 chem-structure-qc = "chem_structure_qc.cli:main"

@@ -68,6 +68,17 @@ python -m pip install -e ".[test]"
 
 RDKit wheels are available for many supported Python/platform combinations. If pip cannot resolve an RDKit wheel for your platform, use a conda-forge environment with `rdkit` and `pandas`, then install this project with `python -m pip install -e ".[test]"`.
 
+## Interactive Dashboard
+
+The optional Streamlit dashboard is a presentation layer over the existing QC package; it does not duplicate or extend the scientific processing. Install the UI extra and launch it from the repository root:
+
+```powershell
+python -m pip install -e ".[ui]"
+streamlit run app/app.py
+```
+
+The dashboard accepts the included example dataset or an uploaded CSV, lets you choose the SMILES column, explores valid and invalid structures, and provides downloads of the same CSV and JSON QC outputs as the core package. Uploaded data is processed in memory only; the app has no login, database, external API calls, or persistent user storage. Scientific limitations described below also apply to the dashboard.
+
 ## 8. Usage
 
 ```powershell
@@ -101,9 +112,13 @@ The deterministic tests use only local example/synthetic data and do not require
 
 ```text
 chem-structure-qc/
+├── .streamlit/config.toml
 ├── CHANGELOG.md
 ├── LICENSE
 ├── README.md
+├── app/
+│   ├── app.py
+│   └── ui_helpers.py
 ├── data/example_compounds.csv
 ├── examples/example_output/
 ├── pyproject.toml
@@ -113,7 +128,8 @@ chem-structure-qc/
 │   └── qc.py
 └── tests/
     ├── test_cli.py
-    └── test_qc.py
+    ├── test_qc.py
+    └── test_ui_helpers.py
 ```
 
 ## 13. Future enhancements
