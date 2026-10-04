@@ -1,141 +1,92 @@
 # Chemical Structure Validation, Canonicalization & QC
 
-## 1. Overview
+A reproducible **Python/RDKit cheminformatics toolkit** for validating chemical structures, canonicalizing SMILES, detecting duplicate compounds, calculating molecular descriptors, and assessing chemical dataset quality.
 
-`chem-structure-qc` is a small Python/RDKit package and command-line tool for assessing chemical structures in CSV datasets. It produces canonical SMILES, common molecular descriptors, duplicate-group information, and a machine-readable QC summary.
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![RDKit](https://img.shields.io/badge/RDKit-Cheminformatics-green)
+![Tests](https://img.shields.io/badge/tests-16%20passed-success)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-## 2. Why this matters in chemical data workflows
+---
 
-Structure errors and duplicate records can distort compound counts, descriptor analyses, and downstream model datasets. A repeatable QC pass makes those issues visible before analysis or model preparation; it does not make scientific decisions about which record should be retained.
+## Overview
 
-## 3. Features
+`chem-structure-qc` is a small Python package and command-line tool for performing reproducible quality control on chemical datasets stored as CSV files.
 
-- Validate required input columns and parse SMILES with RDKit.
-- Keep one result row per input and report invalid/missing SMILES with a reason.
-- Generate RDKit canonical SMILES for valid molecules.
-- Identify duplicate rows and groups using exact canonical-SMILES matches.
-- Calculate molecular weight, Crippen logP, TPSA, HBD, HBA, rotatable bonds, heavy atoms, and ring count.
-- Write CSV outputs and a JSON summary, including validity and duplicate rates.
+The package:
 
-Validation, canonicalization, duplicate detection, and descriptor calculation are separate steps in the workflow.
+- validates chemical structures represented as SMILES
+- generates RDKit canonical SMILES
+- identifies duplicate structures
+- calculates selected molecular descriptors
+- reports invalid or missing structures
+- produces machine-readable QC outputs in CSV and JSON formats
 
-## 4. Workflow
+An optional Streamlit dashboard provides an interactive interface over the same core QC package.
 
-```text
-CSV
-→ SMILES validation
-→ canonicalization
-→ duplicate detection
-→ descriptor calculation
-→ QC outputs
-```
+---
 
-## 5. Example input
+## Why this matters in chemical data workflows
 
-The small educational dataset in `data/example_compounds.csv` contains common example structures, one intentionally invalid SMILES, and equivalent ethanol notations (`CCO` and `OCC`) to demonstrate duplicate detection. It is not experimental or proprietary data.
+Chemical datasets frequently contain:
 
-```csv
-compound_id,smiles
-CMP001,CCO
-CMP002,OCC
-CMP003,c1ccccc1
-```
+- invalid or incomplete structures
+- different SMILES representations of the same molecule
+- duplicate compound records
+- inconsistent chemical records that can affect downstream analysis
 
-The required columns are `compound_id` and `smiles`. A custom SMILES column can be selected with `--smiles-column`.
+A repeatable QC pass makes these issues visible before data is used for analysis, visualization, or model preparation.
 
-## 6. Example QC result
+This project performs **data-quality assessment**; it does not make scientific decisions about which compound record should be retained.
 
-Running the included data reports:
+---
 
-```text
-Input rows          : 6
-Valid structures    : 5
-Invalid structures  : 1
-Unique structures   : 4
-Duplicate rows      : 2
-Duplicate groups    : 1
-```
+## Key Features
 
-## 7. Installation
+### Chemical Structure QC
 
-Python 3.10 or newer is required. Install the package and test dependency in a virtual environment:
+- Validate required input columns
+- Parse SMILES using RDKit
+- Report invalid and missing structures with reasons
+- Generate canonical SMILES for valid molecules
+- Detect duplicate structures using exact canonical-SMILES matching
+- Retain one result row per input record
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
-```
+### Molecular Descriptors
 
-RDKit wheels are available for many supported Python/platform combinations. If pip cannot resolve an RDKit wheel for your platform, use a conda-forge environment with `rdkit` and `pandas`, then install this project with `python -m pip install -e ".[test]"`.
+For valid molecules, the package calculates:
 
-## Interactive Dashboard
+- Molecular weight
+- Crippen LogP
+- TPSA
+- H-bond donors (HBD)
+- H-bond acceptors (HBA)
+- Rotatable bonds
+- Heavy atoms
+- Ring count
 
-The optional Streamlit dashboard is a presentation layer over the existing QC package; it does not duplicate or extend the scientific processing. Install the UI extra and launch it from the repository root:
+### Outputs
 
-```powershell
-python -m pip install -e ".[ui]"
-streamlit run app/app.py
-```
+The workflow generates:
 
-The dashboard accepts the included example dataset or an uploaded CSV, lets you choose the SMILES column, explores valid and invalid structures, and provides downloads of the same CSV and JSON QC outputs as the core package. Uploaded data is processed in memory only; the app has no login, database, external API calls, or persistent user storage. Scientific limitations described below also apply to the dashboard.
+- QC results
+- invalid-structure report
+- duplicate-group report
+- JSON QC summary
 
-## 8. Usage
+---
 
-```powershell
-chem-structure-qc --input data/example_compounds.csv --output outputs
-```
-
-Use `chem-structure-qc --help` to see the available arguments. The output directory is created automatically. Missing input files, malformed CSVs, and missing required columns produce a concise error and nonzero exit status.
-
-## 9. Output files
-
-- `qc_results.csv` — every input row, validity, canonical SMILES, descriptors, and duplicate flag.
-- `invalid_structures.csv` — invalid or missing structures with `error_reason`.
-- `duplicate_groups.csv` — canonical SMILES, group size, and member compound IDs encoded as a JSON array.
-- `qc_report.json` — row counts, unique structure count, duplicate group/row counts, and rates.
-
-Representative outputs from the included dataset are checked in under `examples/example_output/`.
-
-## 10. Scientific notes / limitations
-
-Canonicalization is **not** equivalent to complete chemical standardization. Duplicate detection uses exact RDKit canonical-SMILES strings under the installed RDKit behavior. The package does not attempt production-grade chemical standardization, tautomer normalization, comprehensive salt stripping, charge normalization, isotope normalization, or a policy for stereochemistry. Descriptor failures are represented as missing values rather than aborting the dataset run.
-
-## 11. Testing
-
-```powershell
-python -m pytest -q
-```
-
-The deterministic tests use only local example/synthetic data and do not require internet access.
-
-## 12. Project structure
+## Workflow
 
 ```text
-chem-structure-qc/
-├── .streamlit/config.toml
-├── CHANGELOG.md
-├── LICENSE
-├── README.md
-├── app/
-│   ├── app.py
-│   └── ui_helpers.py
-├── data/example_compounds.csv
-├── examples/example_output/
-├── pyproject.toml
-├── src/chem_structure_qc/
-│   ├── __init__.py
-│   ├── cli.py
-│   └── qc.py
-└── tests/
-    ├── test_cli.py
-    ├── test_qc.py
-    └── test_ui_helpers.py
-```
-
-## 13. Future enhancements
-
-Potential extensions include configurable salt/fragment handling, charge normalization, tautomer handling, stereochemistry policies, and richer validation rules. These require explicit scientific policies and dedicated tests before implementation.
-
-## 14. License
-
-This project is distributed under the MIT License. See [LICENSE](LICENSE).
+CSV Input
+   ↓
+SMILES Validation
+   ↓
+RDKit Canonicalization
+   ↓
+Duplicate Detection
+   ↓
+Molecular Descriptor Calculation
+   ↓
+QC Results + JSON Summary
